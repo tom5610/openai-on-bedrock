@@ -39,11 +39,35 @@ The token, base URL, and model region must all match. This project defaults to
 ## Prerequisites
 
 - Python >= 3.13 and [uv](https://docs.astral.sh/uv/)
-- AWS credentials available in your environment for the target region (e.g. via
-  `AWS_PROFILE`, env vars, or `aws configure`), with Bedrock access to the OpenAI models
+- AWS credentials available in your environment for the target region (see
+  [AWS credentials](#aws-credentials) below), with Bedrock access to the OpenAI models
 - Access to the OpenAI models enabled in the Bedrock console for that region
 
 ## Setup & Run
+
+### AWS credentials
+
+`main.py` calls `provide_token(region=REGION)` to mint the Bedrock bearer token from
+your **standard AWS credential chain** — so you must have valid credentials resolvable
+*before* you run it. The token is Region-scoped, so those credentials must be for the
+same Region as `REGION` in `main.py` (`us-east-2` by default) and have Bedrock access
+to the OpenAI models there.
+
+The simplest setup is to select a configured profile with `AWS_PROFILE`:
+
+```bash
+export AWS_PROFILE=my-profile
+export AWS_REGION=us-east-2   # optional; should match REGION in main.py
+```
+
+Alternatively, export `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` directly, or run
+`aws configure`. Verify credentials resolve before running:
+
+```bash
+aws sts get-caller-identity   # confirms your identity / that credentials are valid
+```
+
+### Install & run
 
 ```bash
 uv sync          # install dependencies from the lockfile

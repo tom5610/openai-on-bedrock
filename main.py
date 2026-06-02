@@ -14,7 +14,7 @@ def main():
     response = client.responses.create(
         model="openai.gpt-5.5",
         input=[
-            {"role": "user", "content": "hello!"}
+            {"role": "user", "content": "Hello!"}
         ]
     )
 
