@@ -66,7 +66,7 @@ os.environ["OPENAI_BASE_URL"] = f"https://bedrock-mantle.{REGION}.api.aws/openai
 client = OpenAI()
 response = client.responses.create(
     model="openai.gpt-5.5",
-    input=[{"role": "user", "content": "what's your specific GPT model?"}],
+    input=[{"role": "user", "content": "Hello!"}],
 )
 print(response.output_text)
 ```
