@@ -1,0 +1,10 @@
+[project]
+name = "openai-test"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "aws-bedrock-token-generator>=1.1.0",
+    "openai>=2.40.0",
+]
