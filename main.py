@@ -2,7 +2,7 @@ import os
 from aws_bedrock_token_generator import provide_token
 from openai import OpenAI
 
-REGION = "us-east-2"
+REGION = "us-east-1"
 token = provide_token(region=REGION)
 
 os.environ['OPENAI_API_KEY'] = token

@@ -30,7 +30,7 @@ so there is no long-lived API key to manage:
 ```python
 from aws_bedrock_token_generator import provide_token
 
-token = provide_token(region="us-east-2")  # uses your AWS credential chain
+token = provide_token(region="us-east-1")  # uses your AWS credential chain
 ```
 
 ## Models & Regions
@@ -41,8 +41,8 @@ token = provide_token(region="us-east-2")  # uses your AWS credential chain
 | GPT-5.4 (best price-performance)     | `openai.gpt-5.4` | `us-east-1`, `us-east-2`, `us-west-2` (US West, Oregon) |
 
 The auth region (bearer-token region or SigV4 signing region), the base URL, and the
-model region must all match. `main.py` defaults to `us-east-2`; `main_sigv4.py` defaults
-to `us-east-1` — both Regions are supported, so pick whichever your credentials and
+model region must all match. Both `main.py` and `main_sigv4.py` default to `us-east-1`,
+but every supported Region works — so pick whichever your credentials and
 model access cover.
 
 ## Prerequisites
@@ -59,14 +59,14 @@ model access cover.
 `main.py` calls `provide_token(region=REGION)` to mint the Bedrock bearer token from
 your **standard AWS credential chain** — so you must have valid credentials resolvable
 *before* you run it. The token is Region-scoped, so those credentials must be for the
-same Region as `REGION` in `main.py` (`us-east-2` by default) and have Bedrock access
+same Region as `REGION` in `main.py` (`us-east-1` by default) and have Bedrock access
 to the OpenAI models there.
 
 The simplest setup is to select a configured profile with `AWS_PROFILE`:
 
 ```bash
 export AWS_PROFILE=my-profile
-export AWS_REGION=us-east-2   # optional; should match REGION in main.py
+export AWS_REGION=us-east-1   # optional; should match REGION in main.py
 ```
 
 Alternatively, export `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` directly, or run
@@ -96,7 +96,7 @@ import os
 from aws_bedrock_token_generator import provide_token
 from openai import OpenAI
 
-REGION = "us-east-2"
+REGION = "us-east-1"
 token = provide_token(region=REGION)
 
 os.environ["OPENAI_API_KEY"] = token
@@ -166,38 +166,40 @@ Notes specific to SigV4:
 
 ## IAM permissions
 
-The caller needs permission to invoke Bedrock Mantle. The two entry points authorize as
-**different** IAM actions — which is what lets you scope down to least privilege:
+The caller needs permission to invoke Bedrock Mantle. Both entry points perform inference,
+so both need `bedrock-mantle:CreateInference`; the bearer-token path additionally passes
+through an auth gate — which is what lets you scope down to least privilege:
 
-| Script | Auth | IAM action |
+| Script | Auth | IAM actions |
 | --- | --- | --- |
-| `main.py` | Bedrock bearer token | `bedrock-mantle:CallWithBearerToken` |
+| `main.py` | Bedrock bearer token | `bedrock-mantle:CreateInference` **+** `bedrock-mantle:CallWithBearerToken` |
 | `main_sigv4.py` | SigV4-signed request | `bedrock-mantle:CreateInference` |
 
 The quickest setup is to attach the AWS-managed policy
 [`AmazonBedrockMantleInferenceAccess`](https://docs.aws.amazon.com/bedrock/latest/userguide/security-iam-awsmanpol.html#security-iam-awsmanpol-AmazonBedrockMantleInferenceAccess),
 which grants both actions (plus `bedrock-mantle:Get*`/`List*` and Marketplace subscribe).
-For least privilege, grant only the single action your script actually uses.
+For least privilege, grant only the action(s) your script actually uses (see below).
 
 #### Why each script needs a different action
 
 The two actions sit at different layers, which is why the choice of *auth* — not the choice
-of model — decides which one you grant:
+of model — decides what you grant:
 
-- **`CreateInference` is the inference *operation*.** A SigV4-signed request authenticates
-  as your IAM principal directly and authorizes as the native operation it performs — here,
-  creating an inference. So `main_sigv4.py` needs `CreateInference` and nothing else.
+- **`CreateInference` is the inference *operation*.** Every inference call needs it,
+  regardless of auth. A SigV4-signed request authenticates as your IAM principal directly and
+  authorizes as this native operation — so `main_sigv4.py` needs `CreateInference` alone.
 - **`CallWithBearerToken` is an auth-method *gate*.** A bearer token (Bedrock API key) is
   presented as an `Authorization: Bearer …` header; Bedrock resolves it to the IAM principal
   that minted it and first checks whether that principal may *use the bearer-token path at
   all*. That gate is the action — hence it's granted on `Resource: "*"` (it guards a method,
   not a project), and a `Deny` on it is the documented kill switch for a leaked key.
 
-So `main.py` (bearer token) is gated by `CallWithBearerToken`, while `main_sigv4.py` (SigV4)
-goes straight to `CreateInference` and never touches the bearer-token gate. The managed
-policy grants both because it supports either auth style; a least-privilege role grants only
-the one its auth mode uses. (A short-term token also inherits the full permissions of the
-principal that minted it, so keep that principal scoped too.)
+So `main.py` (bearer token) needs **both**: it passes the `CallWithBearerToken` gate and then
+performs `CreateInference` (verified — a bearer-token call missing either is denied).
+`main_sigv4.py` (SigV4) skips the gate and needs only `CreateInference`. The managed policy
+grants both because it supports either auth style; a least-privilege role grants only what its
+auth mode uses. (A short-term token also inherits the full permissions of the principal that
+minted it, so keep that principal scoped too.)
 
 ### Least-privilege policy (`main_sigv4.py`)
 
@@ -222,10 +224,36 @@ SigV4 inference needs just `CreateInference`, scoped to the Region(s) you call:
 
 - Replace `ACCOUNT_ID` and keep only the Region(s) you use (GPT-5.5 runs in `us-east-1` /
   `us-east-2`). If you know your Mantle project ID, narrow `project/*` to `project/<id>`.
-- **Using the bearer token (`main.py`) instead?** Swap the action for
-  `bedrock-mantle:CallWithBearerToken` with `"Resource": "*"`.
 - If a call returns `AccessDenied`, the IAM error names the exact missing `bedrock-mantle:`
   action — add precisely that. (A plain `responses.create` shouldn't need `Get*`/`List*`.)
+
+### Least-privilege policy (`main.py`)
+
+The bearer-token path adds the auth gate on top of inference. Keep `CreateInference`
+Region-scoped and grant the gate on `"*"` (it isn't resource-scopable):
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "MantleInference",
+      "Effect": "Allow",
+      "Action": "bedrock-mantle:CreateInference",
+      "Resource": [
+        "arn:aws:bedrock-mantle:us-east-1:ACCOUNT_ID:project/*",
+        "arn:aws:bedrock-mantle:us-east-2:ACCOUNT_ID:project/*"
+      ]
+    },
+    {
+      "Sid": "MantleBearerTokenGate",
+      "Effect": "Allow",
+      "Action": "bedrock-mantle:CallWithBearerToken",
+      "Resource": "*"
+    }
+  ]
+}
+```
 
 ### EKS service role
 
