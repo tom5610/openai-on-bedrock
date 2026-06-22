@@ -1,4 +1,4 @@
-# openai-test
+# OpenAI on Amazon Bedrock
 
 Run **OpenAI GPT-5.5 / GPT-5.4** inference on **Amazon Bedrock** using the standard
 [OpenAI Python SDK](https://github.com/openai/openai-python).
@@ -16,14 +16,16 @@ All processing stays within the Bedrock Region you select.
 
 ## How it works
 
-The OpenAI SDK is configured with two settings:
+In every case the OpenAI SDK is pointed at the Bedrock Mantle base URL; only the
+authentication differs between the two scripts:
 
 | Setting | Value |
 | --- | --- |
 | `OPENAI_BASE_URL` | `https://bedrock-mantle.{region}.api.aws/openai/v1` |
-| `OPENAI_API_KEY`  | A short-lived Bedrock bearer token minted from your AWS credentials |
+| Auth (`main.py`) | A short-lived Bedrock **bearer token** minted from your AWS credentials, passed as `OPENAI_API_KEY` |
+| Auth (`main_sigv4.py`) | A **SigV4 signature** added to each request by a custom `httpx` client; the API key is an unused placeholder |
 
-This project mints the token at runtime from your AWS credentials with
+`main.py` mints the token at runtime from your AWS credentials with
 [`aws-bedrock-token-generator`](https://pypi.org/project/aws-bedrock-token-generator/),
 so there is no long-lived API key to manage:
 
@@ -32,6 +34,9 @@ from aws_bedrock_token_generator import provide_token
 
 token = provide_token(region="us-east-1")  # uses your AWS credential chain
 ```
+
+`main_sigv4.py` instead signs each request directly — see
+[SigV4 variant](#sigv4-variant-main_sigv4py) below.
 
 ## Models & Regions
 

@@ -219,7 +219,7 @@ wheels = [
 ]
 
 [[package]]
-name = "openai-test"
+name = "openai-on-bedrock"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [

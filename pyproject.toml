@@ -1,7 +1,7 @@
 [project]
-name = "openai-test"
+name = "openai-on-bedrock"
 version = "0.1.0"
-description = "Add your description here"
+description = "Run OpenAI GPT-5.5 / GPT-5.4 inference on Amazon Bedrock via the OpenAI SDK"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
