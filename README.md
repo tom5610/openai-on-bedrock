@@ -179,6 +179,26 @@ The quickest setup is to attach the AWS-managed policy
 which grants both actions (plus `bedrock-mantle:Get*`/`List*` and Marketplace subscribe).
 For least privilege, grant only the single action your script actually uses.
 
+#### Why each script needs a different action
+
+The two actions sit at different layers, which is why the choice of *auth* — not the choice
+of model — decides which one you grant:
+
+- **`CreateInference` is the inference *operation*.** A SigV4-signed request authenticates
+  as your IAM principal directly and authorizes as the native operation it performs — here,
+  creating an inference. So `main_sigv4.py` needs `CreateInference` and nothing else.
+- **`CallWithBearerToken` is an auth-method *gate*.** A bearer token (Bedrock API key) is
+  presented as an `Authorization: Bearer …` header; Bedrock resolves it to the IAM principal
+  that minted it and first checks whether that principal may *use the bearer-token path at
+  all*. That gate is the action — hence it's granted on `Resource: "*"` (it guards a method,
+  not a project), and a `Deny` on it is the documented kill switch for a leaked key.
+
+So `main.py` (bearer token) is gated by `CallWithBearerToken`, while `main_sigv4.py` (SigV4)
+goes straight to `CreateInference` and never touches the bearer-token gate. The managed
+policy grants both because it supports either auth style; a least-privilege role grants only
+the one its auth mode uses. (A short-term token also inherits the full permissions of the
+principal that minted it, so keep that principal scoped too.)
+
 ### Least-privilege policy (`main_sigv4.py`)
 
 SigV4 inference needs just `CreateInference`, scoped to the Region(s) you call:
